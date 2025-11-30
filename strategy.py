@@ -1,4 +1,30 @@
 from config import RISK_PER_TRADE
+import pandas as pd
+
+def check_signals(df):
+    """
+    Long: Close > 200 EMA AND RSI < 33
+    Short: Close < 200 EMA AND RSI > 67
+    """
+    if df is None or df.empty:
+        return None
+
+    current = df.iloc[-1]
+    
+    if pd.isna(current['EMA_200']) or pd.isna(current['RSI']):
+        return None
+
+    signal = None
+    
+    # Long Condition
+    if current['Close'] > current['EMA_200'] and current['RSI'] < 33:
+        signal = "BUY"
+    
+    # Short Condition
+    elif current['Close'] < current['EMA_200'] and current['RSI'] > 67:
+        signal = "SELL"
+        
+    return signal
 
 def calculate_lot_size(symbol, entry_price, sl_price):
     """
