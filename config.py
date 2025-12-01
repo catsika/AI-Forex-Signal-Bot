@@ -12,4 +12,10 @@ SYMBOLS = ["EURUSD=X"]  # EUR/USD only - optimized for forex
 TIMEFRAME = "1h"       # 1-hour timeframe for better signals
 LOOKBACK = 100
 COOLDOWN_MINUTES = 60
-RISK_PER_TRADE = 50.0  # USD - $50 risk per trade (0.25% of $20k)
+
+# ═══════════════════════════════════════════════════════════════════
+# PROP FIRM SETTINGS - $20k Account
+# ═══════════════════════════════════════════════════════════════════
+ACCOUNT_SIZE = 20000
+RISK_PER_TRADE = 100.0  # USD - 0.5% risk for faster challenge completion
+                        # Use $50 (0.25%) for more conservative approach
