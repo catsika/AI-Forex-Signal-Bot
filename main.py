@@ -8,6 +8,7 @@ from indicators import calculate_indicators
 from strategy_optimized import check_signals, calculate_trade_params
 from ai_manager import validate_with_ai
 from notifier import send_telegram_alert
+from trade_monitor import trade_monitor
 
 # Setup Logging
 logging.basicConfig(
@@ -56,6 +57,7 @@ def check_market_hours():
 
 def run_bot():
     logger.info("Starting AI-Augmented Signal Bot (Modular + Gemini)...")
+    logger.info("⚡ Trailing Stop Monitor: ACTIVE")
     
     while True:
         try:
@@ -64,6 +66,24 @@ def run_bot():
                 continue
                 
             for symbol in SYMBOLS:
+                # Update existing trades with current price
+                df = fetch_data(symbol)
+                if df is None:
+                    continue
+                    
+                df = calculate_indicators(df)
+                if df is None:
+                    continue
+                
+                # Monitor active trades and update trailing stops
+                current_row = df.iloc[-1]
+                trade_monitor.update_price(
+                    symbol,
+                    current_high=current_row['High'],
+                    current_low=current_row['Low'],
+                    current_close=current_row['Close']
+                )
+                
                 # Cooldown check
                 last_time = last_alert_time.get(symbol)
                 if last_time:
@@ -72,13 +92,6 @@ def run_bot():
                         continue
 
                 logger.info(f"Analyzing {symbol}...")
-                df = fetch_data(symbol)
-                if df is None:
-                    continue
-                    
-                df = calculate_indicators(df)
-                if df is None:
-                    continue
                     
                 signal = check_signals(df)
                 
@@ -93,6 +106,17 @@ def run_bot():
                     
                     if approved:
                         logger.info(f"AI Approved {symbol}. Sending alert.")
+                        
+                        # Track the trade in monitor
+                        trade_monitor.open_trade(
+                            symbol=symbol,
+                            signal=signal,
+                            entry_price=params['price'],
+                            sl_price=params['sl'],
+                            tp_price=params['tp'],
+                            lot_size=params['lot_size']
+                        )
+                        
                         send_telegram_alert(symbol, signal, params, reasoning)
                         last_alert_time[symbol] = datetime.datetime.now()
                     else:
@@ -105,6 +129,7 @@ def run_bot():
             
         except KeyboardInterrupt:
             logger.info("Bot stopped by user.")
+            logger.info(trade_monitor.get_stats())
             break
         except Exception as e:
             logger.error(f"Unexpected error in main loop: {e}")

@@ -92,3 +92,114 @@ def send_telegram_alert(symbol, signal, params, reasoning):
             logger.info(f"Alert sent for {symbol}")
     except Exception as e:
         logger.error(f"Telegram error: {e}")
+
+
+def send_trailing_stop_alert(symbol, trade_type, old_sl, new_sl, entry_price, current_price):
+    """
+    Send Telegram alert when trailing stop is moved to breakeven.
+    
+    This is CRITICAL - user needs to update their broker's SL!
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram credentials missing. Log only.")
+        return
+
+    readable_name = get_readable_name(symbol)
+    emoji = "🟢" if trade_type == "BUY" else "🔴"
+    
+    # Calculate profit locked
+    if trade_type == "BUY":
+        locked_pips = (new_sl - entry_price) * 10000  # For EUR/USD
+    else:
+        locked_pips = (entry_price - new_sl) * 10000
+    
+    message = f"""🔄 **TRAILING STOP UPDATE: {readable_name}**
+━━━━━━━━━━━━━━━━━━━━━
+
+⚡ **ACTION REQUIRED:**
+Update your Stop Loss in your broker NOW!
+
+{emoji} **Trade:** {trade_type}
+├ Entry: {entry_price:.5f}
+├ Current: {current_price:.5f}
+
+🛡️ **Stop Loss Change:**
+├ OLD SL: {old_sl:.5f} ❌
+├ NEW SL: {new_sl:.5f} ✅
+└ Profit Locked: {locked_pips:.1f} pips
+
+💰 **Trade is now RISK-FREE!**
+Your stop is at breakeven + small profit.
+
+━━━━━━━━━━━━━━━━━━━━━
+⏰ Update your broker immediately!
+"""
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    
+    try:
+        resp = requests.post(url, json=payload)
+        if resp.status_code != 200:
+            logger.error(f"Failed to send trailing stop alert: {resp.text}")
+        else:
+            logger.info(f"Trailing stop alert sent for {symbol}")
+    except Exception as e:
+        logger.error(f"Telegram error: {e}")
+
+
+def send_trade_closed_alert(symbol, trade_type, entry_price, exit_price, pnl, reason):
+    """
+    Send Telegram alert when a trade closes.
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram credentials missing. Log only.")
+        return
+
+    readable_name = get_readable_name(symbol)
+    
+    if pnl > 0:
+        emoji = "✅"
+        result = "WIN"
+    elif pnl < -5:
+        emoji = "❌"
+        result = "LOSS"
+    else:
+        emoji = "⚖️"
+        result = "BREAKEVEN"
+    
+    message = f"""{emoji} **TRADE CLOSED: {readable_name}**
+━━━━━━━━━━━━━━━━━━━━━
+
+📊 **Result:** {result}
+
+💵 **Trade Details:**
+├ Type: {trade_type}
+├ Entry: {entry_price:.5f}
+├ Exit: {exit_price:.5f}
+└ Reason: {reason}
+
+💰 **P/L:** ${pnl:+.2f}
+
+━━━━━━━━━━━━━━━━━━━━━
+"""
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    
+    try:
+        resp = requests.post(url, json=payload)
+        if resp.status_code != 200:
+            logger.error(f"Failed to send trade closed alert: {resp.text}")
+        else:
+            logger.info(f"Trade closed alert sent for {symbol}")
+    except Exception as e:
+        logger.error(f"Telegram error: {e}")
