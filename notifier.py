@@ -6,10 +6,7 @@ logger = logging.getLogger(__name__)
 
 def get_readable_name(symbol):
     names = {
-        "GC=F": "GOLD FUTURES",
-        "XAUUSD=X": "GOLD SPOT",
-        "EURUSD=X": "EUR/USD",
-        "BTC-USD": "BITCOIN"
+        "EURUSD=X": "EUR/USD"
     }
     return names.get(symbol, symbol)
 

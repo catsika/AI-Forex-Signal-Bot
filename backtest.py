@@ -2,14 +2,16 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from indicators import calculate_indicators
-from strategy import check_signals
+# Use the grid-search optimized strategy
+from strategy_optimized import check_signals
 
 # --- Configuration ---
-SYMBOL = "EURUSD=X"  # Yahoo Finance symbol for EUR/USD
-PERIOD = "2y"        # 2 Years of data for better testing
-INTERVAL = "1h"      # 1 Hour candles
-INITIAL_CAPITAL = 10000
-RISK_PER_TRADE = 100 # $100 risk per trade
+# EUR/USD ONLY - Optimized for Forex
+SYMBOL = "EURUSD=X"
+PERIOD = "2y"           # 2 Years of data
+INTERVAL = "1h"         # 1 Hour candles
+INITIAL_CAPITAL = 20000 # $20k Prop Firm
+RISK_PER_TRADE = 50     # $50 risk (0.25%)     
 
 def run_backtest():
     print(f"\n{'='*60}")
@@ -67,15 +69,10 @@ def run_backtest():
         atr = current_row['ATR']
         adx = current_row.get('ADX', 25)
         
-        # Dynamic ATR multiplier based on trend strength
-        if adx > 35:
-            atr_mult = 2.0
-        elif adx > 25:
-            atr_mult = 1.5
-        else:
-            atr_mult = 1.2
+        # Fixed ATR multiplier (from grid search optimization)
+        atr_mult = 2.0  # Optimized value
         
-        # --- Manage Active Trade with Trailing Stop ---
+        # --- Manage Active Trade with Simple Trailing Stop ---
         if active_trade:
             entry_price = active_trade['entry_price']
             risk_dist = abs(entry_price - active_trade['original_sl'])
@@ -84,15 +81,9 @@ def run_backtest():
                 # Check for breakeven move (when price hits 1.5x risk)
                 if current_row['High'] >= entry_price + (1.5 * risk_dist):
                     # Move SL to breakeven + small profit
-                    new_sl = entry_price + (0.3 * risk_dist)
+                    new_sl = entry_price + (0.2 * risk_dist)
                     if new_sl > active_trade['sl']:
                         active_trade['sl'] = new_sl
-                
-                # Trailing stop: if price moves 2x risk, trail by 1 ATR
-                if current_row['High'] >= entry_price + (2 * risk_dist):
-                    trailing_sl = current_row['High'] - (1.2 * atr)
-                    if trailing_sl > active_trade['sl']:
-                        active_trade['sl'] = trailing_sl
                 
                 if current_row['Low'] <= active_trade['sl']:
                     # Stopped Out (could be profit if trailing)
@@ -122,15 +113,9 @@ def run_backtest():
             elif active_trade['type'] == 'SELL':
                 # Check for breakeven move
                 if current_row['Low'] <= entry_price - (1.5 * risk_dist):
-                    new_sl = entry_price - (0.3 * risk_dist)
+                    new_sl = entry_price - (0.2 * risk_dist)
                     if new_sl < active_trade['sl']:
                         active_trade['sl'] = new_sl
-                
-                # Trailing stop
-                if current_row['Low'] <= entry_price - (2 * risk_dist):
-                    trailing_sl = current_row['Low'] + (1.2 * atr)
-                    if trailing_sl < active_trade['sl']:
-                        active_trade['sl'] = trailing_sl
                 
                 if current_row['High'] >= active_trade['sl']:
                     # Stopped Out

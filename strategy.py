@@ -7,24 +7,21 @@ logger = logging.getLogger(__name__)
 
 def check_signals(df):
     """
-    IMPROVED Signal Detection with STRICT Multiple Confirmations.
+    EUR/USD Optimized Signal Detection.
     
-    Key Improvements:
-    - Higher minimum score (5.5+) for entries
-    - Stronger trend alignment requirements
-    - Better volatility filtering
-    - Avoid choppy markets (low ADX)
-    - Better RSI timing for entries
+    Fine-tuned for forex market characteristics:
+    - Lower ADX threshold (forex trends less than crypto)
+    - RSI ranges adjusted for forex volatility
+    - Optimized for 1H timeframe
     
-    BUY Signal Requirements (need 5.5+ score):
-    1. TREND ALIGNMENT: Price > EMA_50 > EMA_200 (strong uptrend)
-    2. RSI TIMING: Coming out of oversold (30-45) with upward momentum
-    3. MACD: Histogram positive AND increasing
-    4. STOCHASTIC: Bullish cross in oversold zone
-    5. ADX: > 25 (confirmed trending market)
-    6. VOLUME: Confirms the move (above average)
-    7. BOLLINGER: Price bouncing from lower half
-    8. PRICE ACTION: Not extended too far from EMA
+    BUY Signal Requirements (need 5+ score):
+    1. TREND: Price > EMA_50 > EMA_200
+    2. RSI: 30-55 range, rising
+    3. MACD: Histogram positive or crossing
+    4. STOCHASTIC: Bullish cross or rising from oversold
+    5. ADX: > 18 (forex trends weaker than crypto)
+    6. VOLUME: OBV confirming direction
+    7. BOLLINGER: Price in lower half, bouncing
     """
     if df is None or df.empty:
         return None
@@ -44,13 +41,13 @@ def check_signals(df):
         
         # === PRE-FILTERS (Skip low-quality setups) ===
         
-        # 1. Skip ranging/choppy markets
-        if current['ADX'] < 20:
-            logger.debug("Skipped: Market is ranging (ADX < 20)")
+        # 1. Skip ranging/choppy markets (lower threshold for forex)
+        if current['ADX'] < 18:
+            logger.debug("Skipped: Market is ranging (ADX < 18)")
             return None
             
         # 2. Skip extreme RSI (wait for pullback)
-        if current['RSI'] > 75 or current['RSI'] < 25:
+        if current['RSI'] > 72 or current['RSI'] < 28:
             logger.debug("Skipped: RSI at extreme levels")
             return None
             
@@ -59,7 +56,7 @@ def check_signals(df):
         ema50 = current['EMA_50']
         atr = current['ATR']
         extension = abs(price - ema50) / atr
-        if extension > 3.0:  # More than 3 ATR from EMA50
+        if extension > 2.5:  # Tighter for forex
             logger.debug(f"Skipped: Price too extended from EMA50 ({extension:.1f} ATR)")
             return None
         
@@ -156,12 +153,12 @@ def check_signals(df):
         elif stoch_k > 60 and stoch_k < stoch_k_prev:
             sell_score += 0.5
             
-        # 5. ADX TREND STRENGTH (Only trade strong trends)
+        # 5. ADX TREND STRENGTH (Lower threshold for forex)
         adx = current['ADX']
         plus_di = current.get('+DI', 25)
         minus_di = current.get('-DI', 25)
         
-        if adx > 30:
+        if adx > 25:
             # Strong trend - add confirmation based on DI direction
             if plus_di > minus_di:
                 buy_score += 1.0
@@ -169,7 +166,7 @@ def check_signals(df):
             else:
                 sell_score += 1.0
                 confirmations['sell'].append(f"Strong Bearish ADX ({adx:.0f})")
-        elif adx > 25:
+        elif adx > 20:
             if plus_di > minus_di:
                 buy_score += 0.5
             else:
@@ -223,41 +220,40 @@ def check_signals(df):
         elif mom_score < -40:
             sell_score += 0.5
             
-        # === FINAL DECISION ===
-        MIN_SCORE = 6.0  # Raised further for higher quality trades
-        MIN_CONFIRMATIONS = 4  # Need at least 4 named confirmations
+        # === FINAL DECISION (EUR/USD Optimized) ===
+        MIN_SCORE = 6.0  # Keep high quality threshold
+        MIN_CONFIRMATIONS = 4  # 4 confirmations required
         
-        logger.info(f"Signal Scores - BUY: {buy_score:.1f}, SELL: {sell_score:.1f}")
+        # Determine major trend direction (EMA 200)
+        major_trend = "UP" if price > current['EMA_200'] else "DOWN"
+        
+        logger.info(f"Signal Scores - BUY: {buy_score:.1f}, SELL: {sell_score:.1f} | Trend: {major_trend}")
         logger.info(f"Buy Confirmations ({len(confirmations['buy'])}): {confirmations['buy']}")
         logger.info(f"Sell Confirmations ({len(confirmations['sell'])}): {confirmations['sell']}")
         
-        if buy_score >= MIN_SCORE and len(confirmations['buy']) >= MIN_CONFIRMATIONS:
-            if buy_score > sell_score + 2.0:  # Clear directional bias (stronger)
-                # Final safety checks
-                if current['EMA_50'] < current['EMA_200']:
-                    logger.info("BUY rejected: Not in uptrend")
-                    return None
-                if rsi > 65:
-                    logger.info("BUY rejected: RSI too high")
-                    return None
-                if adx < 22:
-                    logger.info("BUY rejected: Trend too weak")
-                    return None
-                return "BUY"
-                
-        if sell_score >= MIN_SCORE and len(confirmations['sell']) >= MIN_CONFIRMATIONS:
-            if sell_score > buy_score + 2.0:  # Clear directional bias (stronger)
-                # Final safety checks
-                if current['EMA_50'] > current['EMA_200']:
-                    logger.info("SELL rejected: Not in downtrend")
-                    return None
-                if rsi < 35:
-                    logger.info("SELL rejected: RSI too low")
-                    return None
-                if adx < 22:
-                    logger.info("SELL rejected: Trend too weak")
-                    return None
-                return "SELL"
+        # TREND-FOLLOWING MODE: Only trade WITH the major trend
+        if major_trend == "UP":
+            # Only consider BUY signals in uptrend
+            if buy_score >= MIN_SCORE and len(confirmations['buy']) >= MIN_CONFIRMATIONS:
+                if buy_score > sell_score + 1.5:
+                    if rsi > 65:
+                        logger.info("BUY rejected: RSI overbought")
+                        return None
+                    if adx < 18:
+                        logger.info("BUY rejected: Trend too weak")
+                        return None
+                    return "BUY"
+        else:
+            # Only consider SELL signals in downtrend
+            if sell_score >= MIN_SCORE and len(confirmations['sell']) >= MIN_CONFIRMATIONS:
+                if sell_score > buy_score + 1.5:
+                    if rsi < 35:
+                        logger.info("SELL rejected: RSI oversold")
+                        return None
+                    if adx < 18:
+                        logger.info("SELL rejected: Trend too weak")
+                        return None
+                    return "SELL"
             
         return None
         
@@ -278,21 +274,8 @@ def calculate_lot_size(symbol, entry_price, sl_price):
 
     lot_size = 0.0
     
-    # Gold (GC=F or XAUUSD)
-    if "GC=F" in symbol or "XAU" in symbol:
-        lot_size = risk_amount / (100 * distance)
-        
-    # Forex (EURUSD)
-    elif "EURUSD" in symbol or "USD" in symbol:
-        lot_size = risk_amount / (100000 * distance)
-        
-    # Crypto (BTC-USD)
-    elif "BTC" in symbol:
-        lot_size = risk_amount / distance
-        
-    else:
-        # Default Forex calculation
-        lot_size = risk_amount / (100000 * distance)
+    # EUR/USD Forex calculation (standard lot = 100,000 units)
+    lot_size = risk_amount / (100000 * distance)
         
     return max(0.01, round(lot_size, 2))
 
@@ -340,17 +323,9 @@ def calculate_trade_params(signal, row, symbol):
     # Calculate Lot Size
     lot_size = calculate_lot_size(symbol, price, sl_price)
     
-    # Calculate Potential Profit
+    # Calculate Potential Profit (EUR/USD standard lot)
     tp_dist = abs(tp_price - price)
-    
-    if "GC=F" in symbol or "XAU" in symbol:
-        potential_profit = lot_size * 100 * tp_dist
-    elif "EURUSD" in symbol or "USD" in symbol:
-        potential_profit = lot_size * 100000 * tp_dist
-    elif "BTC" in symbol:
-        potential_profit = lot_size * tp_dist
-    else:
-        potential_profit = lot_size * 100000 * tp_dist
+    potential_profit = lot_size * 100000 * tp_dist
     
     # Gather signal quality indicators
     signal_quality = {

@@ -4,7 +4,8 @@ import datetime
 from config import SYMBOLS, COOLDOWN_MINUTES
 from data_fetcher import fetch_data
 from indicators import calculate_indicators
-from strategy import check_signals, calculate_trade_params
+# Use optimized strategy from grid search
+from strategy_optimized import check_signals, calculate_trade_params
 from ai_manager import validate_with_ai
 from notifier import send_telegram_alert
 
