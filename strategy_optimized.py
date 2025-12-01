@@ -8,6 +8,7 @@ Best Configuration Found (Fast Grid Search v2):
 - Risk:Reward: 1:2.5
 - Min Score: 5.0
 - Mode: Both Directions
+- Session Filter: Avoid low-quality hours
 
 Results: +$2,095 profit, 47.9% WR, 1.67 PF, 2.1% max DD, 121 trades
 """
@@ -27,6 +28,9 @@ ATR_MULTIPLIER = 2.0
 RISK_REWARD = 2.5
 MIN_SCORE = 5.0
 
+# Hours to avoid trading (UTC) - historically poor performance
+BLOCKED_HOURS = [1, 3, 6]  # Early Asian session - low liquidity
+
 
 def check_signals(df):
     """
@@ -45,6 +49,13 @@ def check_signals(df):
         current = df.iloc[-1]
         prev = df.iloc[-2] if len(df) > 1 else current
         prev2 = df.iloc[-3] if len(df) > 2 else prev
+        
+        # === SESSION FILTER ===
+        # Skip low-quality trading hours
+        current_hour = df.index[-1].hour
+        if current_hour in BLOCKED_HOURS:
+            logger.debug(f"Skipped: Hour {current_hour} in blocked hours")
+            return None
         
         # Check for required columns
         required_cols = ['EMA_50', 'EMA_200', 'RSI', 'MACD_Histogram', 
