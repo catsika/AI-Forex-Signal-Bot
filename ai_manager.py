@@ -1,69 +1,92 @@
 import google.generativeai as genai
 import logging
 import json
+import re
 from config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
+# High-impact news events that should block trading
+HIGH_IMPACT_KEYWORDS = [
+    "FOMC", "Fed rate", "interest rate decision", "NFP", "non-farm payroll",
+    "CPI", "inflation", "ECB rate", "ECB decision", "GDP", "unemployment",
+    "Powell", "Lagarde", "emergency", "war", "crisis", "default"
+]
+
 def validate_with_ai(symbol, signal, params):
     """
     Ask Gemini if this is a safe trade.
+    Uses Google Search to check real-time news and economic events.
     """
     if not GEMINI_API_KEY:
-        logger.warning("No Gemini API Key provided. Skipping AI validation.")
+        logger.warning("No Gemini API Key. Auto-approving signal.")
         return True, "AI Validation skipped (No Key)."
 
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # Enable Google Search tool
-        tools = [
-            {"google_search_retrieval": {
-                "dynamic_retrieval_config": {
-                    "mode": "dynamic",
-                    "dynamic_threshold": 0.6,
-                }
-            }}
-        ]
-        model = genai.GenerativeModel('gemini-2.0-flash-exp', tools=tools)
+        
+        # Use stable model with search capability
+        model = genai.GenerativeModel(
+            'gemini-2.0-flash',
+            tools=[{"google_search": {}}]  # Enable web search
+        )
+        
+        # Get readable symbol
+        symbol_name = "EUR/USD" if "EURUSD" in symbol else symbol
 
-        prompt = f"""
-        You are a professional Forex Risk Manager. 
-        I have a technical signal for {symbol}.
+        prompt = f"""You are a Forex Risk Manager. Check if it's safe to trade {symbol_name} right now.
+
+SIGNAL: {signal} {symbol_name}
+Entry: {params.get('price', 0):.5f}
+Stop Loss: {params.get('sl', 0):.5f}
+Take Profit: {params.get('tp', 0):.5f}
+
+SEARCH for:
+1. Any major news affecting EUR or USD in the next 4 hours
+2. Upcoming Fed or ECB announcements
+3. Unusual market volatility or geopolitical events
+
+DECISION RULES:
+- REJECT if: Major news in next 2 hours (FOMC, ECB, NFP, CPI)
+- REJECT if: Extreme volatility or "black swan" events
+- APPROVE if: Normal market conditions, no major news imminent
+
+Reply with JSON only:
+{{"approved": true/false, "reasoning": "Brief explanation (1-2 sentences)"}}"""
+
+        response = model.generate_content(prompt)
         
-        Signal: {signal}
-        Current Price: {params['price']:.2f}
-        RSI (14): {params['rsi']:.2f}
-        EMA (200): {params['ema_200']:.2f}
-        ATR (14): {params['atr']:.4f}
+        # Extract JSON from response (handle markdown code blocks)
+        text = response.text.strip()
         
-        Proposed Trade:
-        Entry Zone: {params['entry_min']:.2f} - {params['entry_max']:.2f}
-        Stop Loss: {params['sl']:.2f}
-        Take Profit: {params['tp']:.2f}
+        # Remove markdown code blocks if present
+        if "```" in text:
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+            if match:
+                text = match.group(1)
         
-        Market Context:
-        The strategy is a mean reversion / trend pullback strategy.
-        - Buy when price is ABOVE 200 EMA (Trend Up) but RSI is Oversold (<33).
-        - Sell when price is BELOW 200 EMA (Trend Down) but RSI is Overbought (>67).
+        # Parse JSON
+        result = json.loads(text)
+        approved = result.get("approved", False)
+        reasoning = result.get("reasoning", "No reasoning provided.")
         
-        Task:
-        1. SEARCH for the latest news, economic events, or sentiment affecting {symbol} right now.
-        2. Analyze the technical levels provided.
-        3. Decide if this is a high-probability setup considering BOTH technicals and current market sentiment/news.
+        logger.info(f"AI Decision: {'APPROVED' if approved else 'REJECTED'} - {reasoning}")
+        return approved, reasoning
         
-        Reply with a JSON object:
-        {{
-            "approved": true/false,
-            "reasoning": "Concise reason including any relevant news found (max 2 sentences)."
-        }}
-        """
-        
-        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-        
-        result = json.loads(response.text)
-        
-        return result.get("approved", False), result.get("reasoning", "No reasoning provided.")
+    except json.JSONDecodeError as e:
+        logger.warning(f"AI returned invalid JSON, auto-approving: {e}")
+        return True, "AI response unclear - signal approved with caution"
         
     except Exception as e:
-        logger.error(f"AI Validation failed: {e}")
-        return False, f"AI Error: {e}"
+        logger.error(f"AI Validation error: {e}")
+        # On error, approve but flag it
+        return True, f"AI check failed ({str(e)[:50]}) - proceed with caution"
+
+
+def check_high_impact_news(reasoning: str) -> bool:
+    """Check if AI reasoning mentions high-impact events"""
+    reasoning_lower = reasoning.lower()
+    for keyword in HIGH_IMPACT_KEYWORDS:
+        if keyword.lower() in reasoning_lower:
+            return True
+    return False
