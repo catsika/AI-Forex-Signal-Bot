@@ -1,0 +1,45 @@
+//@version=5
+strategy("AI Bot Strategy (EMA + RSI)", overlay=true, initial_capital=10000, default_qty_type=strategy.cash, default_qty_value=100)
+
+// --- Inputs ---
+emaLength = input.int(200, "EMA Length")
+rsiLength = input.int(14, "RSI Length")
+rsiOverbought = input.int(67, "RSI Overbought")
+rsiOversold = input.int(33, "RSI Oversold")
+atrLength = input.int(14, "ATR Length")
+riskReward = input.float(2.0, "Risk:Reward Ratio")
+atrMultiplier = input.float(1.5, "ATR Multiplier for SL")
+
+// --- Indicators ---
+emaValue = ta.ema(close, emaLength)
+rsiValue = ta.rsi(close, rsiLength)
+atrValue = ta.atr(atrLength)
+
+// --- Plotting ---
+plot(emaValue, "EMA 200", color=color.blue, linewidth=2)
+
+// --- Logic ---
+// Buy: Price > EMA AND RSI < Oversold
+longCondition = close > emaValue and rsiValue < rsiOversold
+
+// Sell: Price < EMA AND RSI > Overbought
+shortCondition = close < emaValue and rsiValue > rsiOverbought
+
+// --- Execution ---
+if (longCondition)
+    // Calculate SL and TP
+    slPrice = low - (atrValue * atrMultiplier)
+    risk = close - slPrice
+    tpPrice = close + (risk * riskReward)
+    
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Exit Long", "Long", stop=slPrice, limit=tpPrice)
+
+if (shortCondition)
+    // Calculate SL and TP
+    slPrice = high + (atrValue * atrMultiplier)
+    risk = slPrice - close
+    tpPrice = close - (risk * riskReward)
+    
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Exit Short", "Short", stop=slPrice, limit=tpPrice)
