@@ -2,16 +2,14 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from indicators import calculate_indicators
-# Use the grid-search optimized strategy
 from strategy_optimized import check_signals
+from config import RISK_PER_TRADE, ACCOUNT_SIZE
 
 # --- Configuration ---
-# EUR/USD ONLY - Optimized for Forex
 SYMBOL = "EURUSD=X"
-PERIOD = "2y"           # 2 Years of data
-INTERVAL = "1h"         # 1 Hour candles
-INITIAL_CAPITAL = 20000 # $20k Prop Firm
-RISK_PER_TRADE = 50     # $50 risk (0.25%)     
+PERIOD = "2y"
+INTERVAL = "1h"
+INITIAL_CAPITAL = ACCOUNT_SIZE  # From config     
 
 def run_backtest():
     print(f"\n{'='*60}")
