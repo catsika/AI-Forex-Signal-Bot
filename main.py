@@ -152,15 +152,8 @@ def run_bot():
                     if approved:
                         logger.info(f"AI Approved {symbol}. Sending alert.")
                         
-                        # Track the trade
-                        trade_monitor.open_trade(
-                            symbol=symbol,
-                            signal=signal,
-                            entry_price=params['price'],
-                            sl_price=params['sl'],
-                            tp_price=params['tp'],
-                            lot_size=params['lot_size']
-                        )
+                        # Send alert first
+                        alert_sent = False
                         
                         # Send alert with buttons if MT5 enabled
                         if USE_MT5 and telegram_bot:
@@ -174,11 +167,26 @@ def run_bot():
                                 'risk': RISK_PER_TRADE,
                                 'ai_analysis': reasoning
                             }
-                            asyncio.run(telegram_bot.send_signal(signal_data))
+                            alert_sent = asyncio.run(telegram_bot.send_signal(signal_data))
                         else:
-                            send_telegram_alert(symbol, signal, params, reasoning)
+                            alert_sent = send_telegram_alert(symbol, signal, params, reasoning)
                         
-                        last_alert_time[symbol] = datetime.datetime.now()
+                        if alert_sent:
+                            logger.info(f"Alert sent successfully. Tracking trade for {symbol}.")
+                            
+                            # Track the trade
+                            trade_monitor.open_trade(
+                                symbol=symbol,
+                                signal=signal,
+                                entry_price=params['price'],
+                                sl_price=params['sl'],
+                                tp_price=params['tp'],
+                                lot_size=params['lot_size']
+                            )
+                            
+                            last_alert_time[symbol] = datetime.datetime.now()
+                        else:
+                            logger.error(f"Failed to send alert for {symbol}. Trade NOT tracked to prevent phantom signals.")
                     else:
                         logger.info(f"AI Rejected {symbol}: {reasoning}")
                 else:

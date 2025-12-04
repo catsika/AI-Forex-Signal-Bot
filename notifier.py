@@ -26,14 +26,25 @@ def get_signal_strength(params):
     else:
         return "⚠️ WEAK"
 
+def escape_markdown(text):
+    """Helper to escape Markdown special characters"""
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    text = str(text)
+    for char in special_chars:
+        text = text.replace(char, f"\\{char}")
+    return text
+
 def send_telegram_alert(symbol, signal, params, reasoning):
     """
     Send formatted message to Telegram with enhanced metrics.
     Formatted for easy manual execution on MT5 mobile app.
+    
+    Returns:
+        bool: True if sent successfully, False otherwise.
     """
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         logger.warning("Telegram credentials missing. Log only.")
-        return
+        return False
 
     readable_name = get_readable_name(symbol)
     emoji = "🟢" if signal == "BUY" else "🔴"
@@ -47,10 +58,13 @@ def send_telegram_alert(symbol, signal, params, reasoning):
     sl_pips = abs(entry - params['sl']) * 10000
     tp_pips = abs(entry - params['tp']) * 10000
     
-    message = f"""{emoji} **{signal} {readable_name}** {emoji}
+    # Escape dynamic content
+    safe_reasoning = escape_markdown(reasoning[:200])
+    
+    message = f"""{emoji} *{signal} {readable_name}* {emoji}
 ━━━━━━━━━━━━━━━━━━━━━
 
-� **COPY THESE VALUES:**
+👇 *COPY THESE VALUES:*
 
 Entry: `{entry:.5f}`
 SL: `{params['sl']:.5f}` ({sl_pips:.0f} pips)
@@ -60,10 +74,10 @@ Lot: `{params['lot_size']}`
 ━━━━━━━━━━━━━━━━━━━━━
 
 💰 Risk: ${params['risk_amount']:.0f} → Reward: ${params['potential_profit']:.0f}
-� Strength: {signal_strength}
-� ADX: {quality.get('adx', 0):.0f} | RSI: {quality.get('rsi', 0):.0f}
+💪 Strength: {signal_strength}
+📊 ADX: {quality.get('adx', 0):.0f} | RSI: {quality.get('rsi', 0):.0f}
 
-🤖 **AI:** {reasoning[:200]}...
+🤖 *AI:* {safe_reasoning}...
 
 ━━━━━━━━━━━━━━━━━━━━━
 ⚡ Tap values above to copy!
@@ -73,17 +87,20 @@ Lot: `{params['lot_size']}`
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "Markdown"
+        "parse_mode": "MarkdownV2"
     }
     
     try:
         resp = requests.post(url, json=payload)
         if resp.status_code != 200:
             logger.error(f"Failed to send Telegram message: {resp.text}")
+            return False
         else:
             logger.info(f"Alert sent for {symbol}")
+            return True
     except Exception as e:
         logger.error(f"Telegram error: {e}")
+        return False
 
 
 def send_trailing_stop_alert(symbol, trade_type, old_sl, new_sl, entry_price, current_price):

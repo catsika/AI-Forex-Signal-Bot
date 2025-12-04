@@ -25,11 +25,9 @@ def validate_with_ai(symbol, signal, params):
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # Use stable model with search capability
-        model = genai.GenerativeModel(
-            'gemini-2.0-flash',
-            tools=[{"google_search": {}}]  # Enable web search
-        )
+        # Use stable model
+        # Note: google_search tool removed temporarily as it was causing API errors
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Get readable symbol
         symbol_name = "EUR/USD" if "EURUSD" in symbol else symbol

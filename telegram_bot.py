@@ -217,13 +217,18 @@ class TelegramTradeBot:
         """Send a trading signal with interactive buttons"""
         msg, markup = self.create_signal_message(signal)
         
-        async with Application.builder().token(self.token).build() as app:
-            await app.bot.send_message(
-                chat_id=self.chat_id,
-                text=msg,
-                reply_markup=markup,
-                parse_mode='Markdown'
-            )
+        try:
+            async with Application.builder().token(self.token).build() as app:
+                await app.bot.send_message(
+                    chat_id=self.chat_id,
+                    text=msg,
+                    reply_markup=markup,
+                    parse_mode='Markdown'
+                )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send Telegram signal: {e}")
+            return False
     
     def run(self):
         """Run the Telegram bot"""
